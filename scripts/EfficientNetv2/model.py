@@ -8,17 +8,20 @@ import torch.nn as nn
 import lightning.pytorch as pl
 import wandb
 from torchvision import models
-from scripts.EfficientNetv2.Infernece import TensorRTInference, ToTensorRT
+from scripts.EfficientNetv2.infernece import TensorRTInference, ToTensorRT
 from torchsummary import summary
 
 class EfficientNetv2(pl.LightningModule):
     def __init__(self, input_dim, model_path:str=None, model_name='efficientnet-v2-s', 
-                 pretrained:bool=True, infer_tensorrt:bool=False, n_classes:int=1000):
+                 pretrained:bool=True, infer_tensorrt:bool=False, 
+                 n_classes:int=1000, infer_batch_size:int=1):
         super(EfficientNetv2, self).__init__()
         self.model_path = model_path
         self.example_input_array = torch.rand(1, 3, input_dim, input_dim)
         self.n_classes = n_classes
         self.infer_tensorrt = infer_tensorrt
+        self.infer_batch_size = infer_batch_size
+        self.input_dim = input_dim
         self.model_family = {
             'efficientnet-v2-s': models.efficientnet_v2_s,
             'efficientnet-v2-m': models.efficientnet_v2_m,
@@ -29,13 +32,19 @@ class EfficientNetv2(pl.LightningModule):
         
         try:
             if self.infer_tensorrt:
-                self.model = TensorRTInference(self.model_path)
+                print('Loading TensorRT model')
+                self.example_input_array[0] = infer_batch_size
+                self.model = TensorRTInference(self.model_path+'.trt',
+                                               batch_size=infer_batch_size,
+                                               input_dim=input_dim,)
                 
             else:
+                print('Loading PyTorch model')
                 self.model = torch.load(model_path+'.pt')
-            self.output_dim = self.model.features[-1][0].out_channels
-        except Exception as error:
+                self.output_dim = self.model.features[-1][0].out_channels
+        except FileNotFoundError as error:
             print(error)
+            print('Creating new model')
             self.create_model(model_name, pretrained)
             if self.infer_tensorrt != True:
                 assert n_classes is not None, 'Please provide number of classes for the model'
@@ -60,7 +69,7 @@ class EfficientNetv2(pl.LightningModule):
         while temp > limit:
             self.model.classifier.extend([
                 nn.Linear(temp,
-                          temp//4),
+                          temp//4 if temp//4 > limit else self.n_classes),
                 nn.ReLU(),
                 nn.Dropout(0.4),
             ])
@@ -102,10 +111,10 @@ class EfficientNetv2(pl.LightningModule):
         #self.save_model()
         #self.to_torchscript(self.model_path+'_script.pt', method='script', example_inputs=self.example_input_array)
         #self.to_onnx(self.model_path+'.onnx', self.example_input_array, export_params=True)
-        self.to_tensorrt()
+        self.to_tensorrt(self.infer_batch_size, self.input_dim)
 
-    def to_tensorrt(self):
-        ToTensorRT(self.model_path)
+    def to_tensorrt(self, batch_size:int=1, input_dim:int=256):
+        ToTensorRT(self.model_path, )
 
     def create_model(self, model_name:str, pretrained:bool=True):
         if pretrained:
@@ -135,6 +144,12 @@ if __name__ == '__main__':
     model = EfficientNetv2(model_name='efficientnet-v2-s',
                            model_path='/workspace/Benetech-Kaggle-Competition/models/efficientnet-v2-s',
                            input_dim=256,
-                           n_classes=5).cuda()
-    summary(model, (3, 256, 256))
-    model.finalize()
+                           n_classes=5,
+                           infer_tensorrt=True,
+                           infer_batch_size=1).cuda()
+    
+    output = model(torch.rand(1, 3, 256, 256).numpy())
+    print(output)
+    
+    #summary(model, (3, 256, 256))
+    #model.finalize()
