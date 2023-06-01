@@ -2,4 +2,6 @@
 /models/*.pt
 /models/*.onnx
 /models/*.trt
+/data/*.parquet
+/models/*.pb
 __pycache__/
