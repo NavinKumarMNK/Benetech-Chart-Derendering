@@ -51,6 +51,9 @@ class EfficientNetv2(pl.LightningModule):
                 self._make_classifier(limit=64)
                 self.save_model()
                 
+        ## set model to train
+        self.model.train()
+
     def _make_classifier(self, limit:int=64):
         self.model.classifier = nn.Sequential(
             nn.Linear(self.output_dim, 
@@ -103,15 +106,12 @@ class EfficientNetv2(pl.LightningModule):
         self.log('val_loss', loss)
         self.log('val_acc', acc)
 
+    def on_validation_epoch_end(self) -> None:
+        ## 
+
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
         return optimizer
-
-    def finalize(self):
-        #self.save_model()
-        #self.to_torchscript(self.model_path+'_script.pt', method='script', example_inputs=self.example_input_array)
-        #self.to_onnx(self.model_path+'.onnx', self.example_input_array, export_params=True)
-        self.to_tensorrt(self.infer_batch_size, self.input_dim)
 
     def to_tensorrt(self, batch_size:int=1, input_dim:int=256):
         ToTensorRT(self.model_path, )

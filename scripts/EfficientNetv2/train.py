@@ -64,6 +64,7 @@ if __name__ == '__main__':
         log_every_n_steps=1,
         flush_logs_every_n_steps=10,
         weights_summary='full',
+        accumulate_grad_batches=8
     )
 
 

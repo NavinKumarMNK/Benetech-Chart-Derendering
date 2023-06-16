@@ -5,3 +5,4 @@
 /data/*.parquet
 /models/*.pb
 __pycache__/
+/data/*
