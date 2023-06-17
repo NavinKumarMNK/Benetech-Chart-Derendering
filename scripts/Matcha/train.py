@@ -12,7 +12,7 @@ from torchsummary import summary
 
 from transformers import PreTrainedTokenizerBase, PreTrainedModel
 from transformers import Pix2StructConfig, Pix2StructForConditionalGeneration, AutoProcessor
-from scripts.utils.config import Config
+from scripts.utils.config import Config, NEW_TOKENS
 
 from typing import Dict
 from lightning.pytorch.loggers import WandbLogger
@@ -30,6 +30,14 @@ if __name__ == '__main__':
 
     model = Pix2StructForConditionalGeneration.from_pretrained("google/matcha-base")
     processor = AutoProcessor.from_pretrained("google/matcha-base", is_vqa=False)
+    processor.image_processor.size = (
+        "height": Config.image_height,
+        "width": Config.image_width,
+    )
+    processor.tokenizer.add_tokens(NEW_TOKENS)
+    model.resize_token_embeddings(len(processor.tokenizer))
+    
+
 
     wandb_logger = WandbLogger(project="matcha", name="matcha")
     wandb_logger.watch(model, log='all', log_freq=100)
@@ -41,6 +49,14 @@ if __name__ == '__main__':
         input_dim=512,
         model_path="models/matcha",
     )
+
+    dataset = BeneTechDataModule(
+                    processor=processor,
+                    batch_size=Config.batch_size,
+                    num_workers=Config.num_workers,
+                    dataset=Config.train_df_path,
+                    )
+    dataset.setup()
 
     callbacks = [
         pl_callbacks.ModelCheckpoint(
@@ -73,4 +89,5 @@ if __name__ == '__main__':
         accumulate_grad_batches=8
     )
 
-   
+    trainer.fit(model, dataset)
+    model.save_model()
