@@ -12,7 +12,6 @@ from scripts.utils.config import Config
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import pandas as pd
-
 graph_types_rev = {
     "dot":"d",
     "horizontal_bar":"h",
@@ -23,7 +22,7 @@ graph_types_rev = {
 
 def augments():
         return A.Compose([
-            A.Resize(width=Config.image_height, height=Config.image_width),
+            A.Resize(width=Config.image_size, height=Config.image_size),
             A.Normalize(
                 mean=[0, 0, 0], 
                 std=[1, 1, 1],
@@ -52,6 +51,7 @@ class BeneTechDataset(TorchDataset):
             path = "/kaggle/input/benetech-making-graphs-accessible/train/images/"
             path = path + item['path']
 
+        
         image = cv2.imread(path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
@@ -70,7 +70,7 @@ class BeneTechDataset(TorchDataset):
 
 
 class BeneTechDataModule(pl.LightningDataModule):
-    def __init__(self, dataset, val_dataset, processor, batch_size=1, num_workers=1):
+    def __init__(self, dataset, val_dataset, processor, batch_size, num_workers):
         super().__init__()
         self.dataset = dataset
         self.val_dataset = val_dataset
@@ -80,7 +80,7 @@ class BeneTechDataModule(pl.LightningDataModule):
 
     def setup(self, stage=None):
         self.train_dataset = BeneTechDataset(self.dataset, self.processor)
-        self.val_dataset = BeneTechDataset(self.dataset, self.processor)
+        self.val_dataset = BeneTechDataset(self.val_dataset, self.processor)
         
     def train_dataloader(self):
         return DataLoader(
@@ -101,14 +101,12 @@ class BeneTechDataModule(pl.LightningDataModule):
         )
 
     def collate_fn(self, batch):
-        print("collate_fn")
-        print(batch)
         new_batch = {"flattened_patches": [], "attention_mask": []}
         texts = [item["text"] for item in batch]
         encoding = self.processor(
             text=texts,
             return_tensors="pt", 
-            padding=True, 
+            padding="max_length", 
             truncation=True, 
             add_special_tokens=True,
             max_length=Config.max_length
@@ -121,9 +119,3 @@ class BeneTechDataModule(pl.LightningDataModule):
         new_batch["attention_mask"] = torch.stack(new_batch["attention_mask"])
         return new_batch
 
-if __name__ == '__main__':
-    data = BeneTechDataModule(train_dataset, val_dataset, processor, batch_size=2, num_workers=1)
-    data.setup()
-    for sample in data.val_dataloader():
-        print(sample)
-        break
